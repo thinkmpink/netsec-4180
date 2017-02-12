@@ -59,6 +59,14 @@ int isValidServerName(const char *server)
     else return 0;
 }
 
+/* Return 1 if the port number n is 0 < n 65536 */
+int isValidPort(const char *c)
+{   
+    int num = atoi(c);
+    if (num > 0 && num < 65536) return 1;
+    else return 0;
+}
+
 /* Input error suite */
 void checkInputErrors(int argc, char **argv)
 {
@@ -108,6 +116,8 @@ void checkInputErrors(int argc, char **argv)
     else if (!isValidServerName(serverIP))
         errorExitWithMessage("Please enter a valid dotted quad or server name.\n");
 
+    else if (!isValidPort(serverPort))
+        errorExitWithMessage("Please enter a port number 0 < n < 65536. \n");
 }
 
 int main(int argc, char **argv)
