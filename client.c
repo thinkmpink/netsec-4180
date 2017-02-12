@@ -29,48 +29,25 @@ int isAlphaNum(const char *str)
     return 1;
 }
 
-/* Return 1 if filepath can be opened and does not end with '/', else 0 */
-int isValidFilepath(const char *filepath)
-{
-    FILE *f = fopen(filepath, "r");
-    if (!f || filepath[strlen(filepath)-1] == '/')
-    {
-       fclose(f);
-       return 0;
-    }
-    else
-    {  
-       fclose(f);
-       return 1;
-    }
-}
 
-/* Return 1 if server is a valid dotted quad or can be found in a DNS
- * lookup. 0 otherwise. */
-int isValidServerName(const char *server)
-{
-    //struct hostent *he;    /* Server IP struct */
-    struct in_addr addr4;  /* Server address IPv4 */
-    struct in6_addr addr6; /* Server address IPv4 */
-    if (inet_pton(AF_INET, server, &addr4) 
-     || inet_pton(AF_INET6, server, &addr6)
-     || gethostbyname(server)
-    ) return 1;
-    else return 0;
-}
-
-/* Return 1 if the port number n is 0 < n 65536 */
-int isValidPort(const char *c)
+/* Return port number if the port number n is 0 < n 65536, else 0 */
+unsigned short getPort(const char *c)
 {   
-    int num = atoi(c);
-    if (num > 0 && num < 65536) return 1;
+    long numDec = strtol(c, NULL, 10);
+    long numHex = strtol(c, NULL, 16);
+    if (numDec > 0 && numDec < 65536) return (unsigned short) numDec; 
+    else if (numHex > 0 && numHex < 65536) return (unsigned short) numHex;
     else return 0;
 }
 
-/* Input error suite */
-void checkInputErrors(int argc, char **argv)
+int main(int argc, char **argv)
 {
     
+    /*
+     * Input error suite 
+     *
+     *
+     */
     char msgBuffer[ERRBUFSIZE];
     
     //TODO: get rid of this once done with error checking
@@ -91,11 +68,15 @@ void checkInputErrors(int argc, char **argv)
         errorExitWithMessage(msgBuffer);
     }
 
-    char *password = argv[1];
-    char *filepath = argv[2];
-    char *serverIP = argv[3];
-    char *serverPort = argv[4];
-    char *rsaComponents  = argv[5];
+    char *password      = argv[1];
+    char *filepath      = argv[2];
+    char *serverIP      = argv[3];
+    char *serverPort    = argv[4];
+    char *rsaComponents = argv[5];
+    FILE *f;
+    unsigned short sPort;
+
+    struct hostent host;
 
     /* Incorrect password */
     if (strlen(password) != 16) 
@@ -105,26 +86,58 @@ void checkInputErrors(int argc, char **argv)
         errorExitWithMessage("Password must only use letters A-Za-z and digits 0-9.\n");
 
     /* Incorrect filepath */
-    else if (!isValidFilepath(filepath))
+    f = fopen(filepath, "rb");
+    if (!f || filepath[strlen(filepath)-1] == '/')
     {
+        if (f) fclose(f);
         strlcpy(msgBuffer, "File '", ERRBUFSIZE);
         strlcat(msgBuffer, filepath, ERRBUFSIZE);
         strlcat(msgBuffer, "' does not exist.\n", ERRBUFSIZE);
         errorExitWithMessage(msgBuffer);
     }
-    
-    else if (!isValidServerName(serverIP))
-        errorExitWithMessage("Please enter a valid dotted quad or server name.\n");
 
-    else if (!isValidPort(serverPort))
+    //TODO: add section to check RSA info
+
+    /* Incorrect server port number */
+    else if (!(sPort = getPort(serverPort)))
         errorExitWithMessage("Please enter a port number 0 < n < 65536. \n");
-}
+    
+    /*
+     * End of error suite, except server checking.
+     *
+     *
+     *
+     */
+    
+    char servPortDecStr[6];
+    snprintf(servPortDecStr, 5, "%d", sPort);
 
-int main(int argc, char **argv)
-{
-    /* Check all input except server validity. */
-    checkInputErrors(argc, argv);
+    int sockfd;
+    struct addrinfo hints, *servinfo, *p;
+    int errno;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
 
+    if ((errno = getaddrinfo(serverIP, servPortDecStr, &hints, &servinfo)) != 0)
+    {
+        strlcpy(msgBuffer, "Invalid name or address: ", ERRBUFSIZE);
+        strlcat(msgBuffer, gai_strerror(errno), ERRBUFSIZE);
+        strlcat(msgBuffer, "\n", ERRBUFSIZE);
+        fclose(f);
+        errorExitWithMessage(msgBuffer);
+    }
+
+    
+
+
+    /*  */
+    //else if (!isValidServerName(serverIP))
+    //    errorExitWithMessage("Please enter a valid dotted quad or server name.\n");
+
+
+    fclose(f);
+    freeaddrinfo(servinfo);
     exit(0);
 }
 
