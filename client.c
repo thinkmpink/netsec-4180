@@ -1,8 +1,11 @@
+
+#include <arpa/inet.h>
+#include <bsd/string.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h> 
-#include <bsd/string.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#include <sys/socket.h>
+#include <unistd.h>             /* for close() */
 
 #define ERRBUFSIZE 1024
 
@@ -68,11 +71,11 @@ int main(int argc, char **argv)
         errorExitWithMessage(msgBuffer);
     }
 
-    char *password      = argv[1];
-    char *filepath      = argv[2];
-    char *serverIP      = argv[3];
-    char *serverPort    = argv[4];
-    char *rsaComponents = argv[5];
+    char *password              = argv[1];
+    char *filepath              = argv[2];
+    char *serverIP              = argv[3];
+    char *serverPort            = argv[4];
+    char *rsaPrivKeyFilepath    = argv[5];
     FILE *f;
     unsigned short sPort;
 
@@ -102,16 +105,11 @@ int main(int argc, char **argv)
     else if (!(sPort = getPort(serverPort)))
         errorExitWithMessage("Please enter a port number 0 < n < 65536. \n");
     
-    /*
-     * End of error suite, except server checking.
-     *
-     *
-     *
-     */
-    
+    /* Convert server port back to decimal string */
     char servPortDecStr[6];
     snprintf(servPortDecStr, 5, "%d", sPort);
 
+    /* Test that server address is valid, save address info in servinfo */
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int errno;
@@ -129,11 +127,49 @@ int main(int argc, char **argv)
     }
 
     
+    /*
+     * End of error suite.
+     *
+     * Set up socket.
+     */
+    
+    /* Test all possible connections in servinfo */
+    for(p = servinfo; p != NULL; p = p->ai_next)
+    {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype, 
+        p->ai_protocol)) == -1)
+        {
+            perror("socket() failed, testing next address\n");
+            continue;
+        }    
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1)
+        {
+            perror("connect() failed, closing socket\n");
+            close(sockfd);
+            continue;
+        }
+
+        break; /* This means we connected successfully */
+
+    }
+ 
+    /* Could not find any valid connection */
+    if (!p) 
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Failed to connect to server.\n");
+    }
 
 
-    /*  */
-    //else if (!isValidServerName(serverIP))
-    //    errorExitWithMessage("Please enter a valid dotted quad or server name.\n");
+    //In the meantime, just send a file in the clear. Ensure its transmission is
+    //safe.
+
+
+
+    //TODO: get server's public key somehow
+    //TODO: encrypt open file using execl with opts from cookbook
 
 
     fclose(f);
