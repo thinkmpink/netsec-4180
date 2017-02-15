@@ -165,7 +165,17 @@ int main(int argc, char **argv)
 
     //In the meantime, just send a file in the clear. Ensure its transmission is
     //safe.
-
+    char encDataBuf[ERRBUFSIZE];
+    int readCount;
+    while (readCount = fread(encDataBuf, 1, 1024, f))
+    {
+        if (send(sockfd, encDataBuf, readCount, 0) == -1)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Connected, but send() failed.\n");
+        }
+    }
 
 
     //TODO: get server's public key somehow
