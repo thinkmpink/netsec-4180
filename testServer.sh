@@ -7,6 +7,10 @@ memchk="eval "$outspace";"$valgrind
 # Try no arguments
 $memchk 
 
+# Invalid trust mode
+$memchk 12344 ur 44
+$memchk 12344 tr 44
+
 # Invalid port number 
 $memchk 77777 t 5
 

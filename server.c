@@ -73,11 +73,25 @@ int main(int argc, char **argv)
     char *serverPort            = argv[1];
     char *trustMode             = argv[2];
     char *rsaPrivKeyFilepath    = argv[3];
+    char *fileToDecrypt         = "encryptedfile";
     unsigned short sPort;
 
-
-
     //TODO: add section to check RSA info
+    
+    /* Parse trust mode */
+    if (!(strncmp(trustMode, "t", 2)))
+    {
+        ; //Do nothing
+    }
+    else if (!(strncmp(trustMode, "u", 2)))
+    {
+        fileToDecrypt = "fakefile";
+    }
+    else
+    {
+        errorExitWithMessage("Unrecognized trust mode. Rerun with [t/u]\n");
+    }
+
 
     /* Incorrect server port number */
     if (!(sPort = getPort(serverPort)))
