@@ -79,7 +79,6 @@ int main(int argc, char **argv)
     FILE *f;
     unsigned short sPort;
 
-    //TODO: do we need this?: struct hostent host;
 
     /* Incorrect password */
     if (strlen(password) != 16) 
@@ -103,8 +102,11 @@ int main(int argc, char **argv)
 
     /* Incorrect server port number */
     else if (!(sPort = getPort(serverPort)))
+    {    
+        fclose(f);
         errorExitWithMessage("Please enter a port number 0 < n < 65536. \n");
-    
+    }
+
     /* Convert server port back to decimal string */
     char servPortDecStr[6];
     snprintf(servPortDecStr, 5, "%d", sPort);

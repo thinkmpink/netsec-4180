@@ -1,12 +1,10 @@
 
 #include <arpa/inet.h>
 #include <bsd/string.h>
-//#include <libexplain/listen.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h> 
 #include <sys/socket.h>
-#include <sys/types.h>  //TODO: do we need this
 #include <unistd.h>             /* for close() */
 
 #define ERRBUFSIZE 1024
@@ -76,7 +74,6 @@ int main(int argc, char **argv)
     char *trustMode             = argv[2];
     char *rsaPrivKeyFilepath    = argv[3];
     unsigned short sPort;
-    //TODO: do we need this?: struct hostent host;
 
 
 
@@ -125,7 +122,7 @@ int main(int argc, char **argv)
     if (bind(welcomeSock, res->ai_addr, res->ai_addrlen) == -1)
     {
         close(welcomeSock);
-        perror("(server) connect() failed, closing socket\n");
+        perror("(server) bind() failed, closing socket\n");
     }
 
     /* Could not bind to socket */
@@ -133,7 +130,7 @@ int main(int argc, char **argv)
     {
         close(welcomeSock);
         freeaddrinfo(res);
-        errorExitWithMessage("(server) failed to bind to socket.\n");
+        errorExitWithMessage("(server) bound to invalid port.\n");
     }
 
     /* Now wait for incoming connections. */
@@ -149,16 +146,15 @@ int main(int argc, char **argv)
 
     /* Now accept the incoming connection and create a new socket for it. */
     int clientSock;
-    struct sockaddr_storage clientAddr; //TODO: try sockaddr_storage
+    struct sockaddr_storage clientAddr; 
     socklen_t addr_size = sizeof(clientAddr);
     if ((clientSock = accept(welcomeSock, 
                             (struct sockaddr *) &clientAddr, 
                             &addr_size)) <= 0)
     {
-        //close(welcomeSock);
         close(clientSock);
         freeaddrinfo(res);
-        errorExitWithMessage("accept() failed.\n");
+        errorExitWithMessage("(server) accept() failed.\n");
     }
 
 
@@ -174,9 +170,13 @@ int main(int argc, char **argv)
         close(welcomeSock);
         close(clientSock);
         freeaddrinfo(res);
-        errorExitWithMessage("fopen() failed\n");
+        errorExitWithMessage("(server) fopen() failed\n");
     }
 
+    /* Server receives encrypted bytes from client
+     * Server writes the bytes to 'encryptedfile', a temp file 
+     */
+     //TODO: delete the temp file?
     while ((readCount = recv(clientSock, encDataBuf, ERRBUFSIZE, 0)) > 0)
     {
         /* Write bytes to disk, or exit while loop if read 0 bytes */
@@ -187,7 +187,7 @@ int main(int argc, char **argv)
             close(clientSock);
             fclose(encDataFile);
             freeaddrinfo(res);
-            errorExitWithMessage("fwrite() failed\n");
+            errorExitWithMessage("(server) fwrite() failed\n");
         }
         //TODO: maybe need other error checking on writeCount?
     }
