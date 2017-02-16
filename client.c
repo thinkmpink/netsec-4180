@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     FILE *f;
     unsigned short sPort;
 
-    struct hostent host;
+    //TODO: do we need this?: struct hostent host;
 
     /* Incorrect password */
     if (strlen(password) != 16) 
@@ -167,7 +167,7 @@ int main(int argc, char **argv)
     //safe.
     char encDataBuf[ERRBUFSIZE];
     int readCount;
-    while (readCount = fread(encDataBuf, 1, 1024, f))
+    while ((readCount = fread(encDataBuf, 1, 1024, f)))
     {
         if (send(sockfd, encDataBuf, readCount, 0) == -1)
         {

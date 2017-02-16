@@ -5,17 +5,19 @@
 CC  = gcc
 CXX = g++
 
-INCLUDES = -lbsd 
+INCLUDES = -lbsd #-llibexplain
 CFLAGS   = -g -Wall $(INCLUDES)
 CXXFLAGS = -g -Wall $(INCLUDES)
 
 LDFLAGS = 
-LDLIBS  = -lbsd
+LDLIBS  = -lbsd #-llibexplain
 
 .PHONY: default
-default: client #server
+default: client server
 
 client: client.o
+
+server: server.o
 
 .PHONY: clean
 clean:
