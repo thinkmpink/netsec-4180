@@ -314,17 +314,27 @@ void decryptAndVerify(FILE *encFile, char *result)
     }
     
     /* Read the file into memory */
-    int i;
-    for (i = 0; i < fSize; i++)
+    if (fSize != (fread(fBuf, 1, fSize, encFile)))
     {
-        if ((fBuf[i] = fgetc(encFile)) < 0)
+        fclose(encFile);
+        free(fBuf);
+        errorExitWithMessage("fgetc() failed. file length too short\n");
+    }
+
+    int i;
+  /*  for (i = 0; i < fSize; i++)
+    {
+        if ((fBuf[i] = fgetc(encFile)) == EOF)
         {
+            fprintf(stderr, "wrote fbuf[i] where i: %d"
+                ", fBuf[i]:%d, fSize: %d",
+                i, (int) fBuf[i], (int)fSize);
             fclose(encFile);
             free(fBuf);
             errorExitWithMessage("fgetc() failed. file length too short\n");
         }
     } 
-
+  */
     /* Find all tags */
     char c;
     for (i = 0; i < fSize; i++)
@@ -466,6 +476,7 @@ void decryptAndVerify(FILE *encFile, char *result)
     }
 
     
+    free(fBuf);
     strncpy(result, "Verification Passed", 20);
     return;
 }

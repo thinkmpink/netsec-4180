@@ -170,7 +170,7 @@ int main(int argc, char **argv)
     //safe.
     char encDataBuf[ERRBUFSIZE];
     int readCount;
-    while ((readCount = fread(encDataBuf, 1, 1024, f)))
+  /*  while ((readCount = fread(encDataBuf, 1, 1024, f)))
     {
         if (send(sockfd, encDataBuf, readCount, 0) == -1)
         {
@@ -179,9 +179,9 @@ int main(int argc, char **argv)
             errorExitWithMessage("Connected, but send() failed.\n");
         }
     }
-
+  */
     /* Since we are using exec() to do the crypto, which won't return, 
-     * we need to create a fork to call exec */
+     * we need to create forks to call exec */
 
     pid_t fileEncPID, sigPID, passPID;
     fileEncPID = fork();
@@ -300,19 +300,128 @@ int main(int argc, char **argv)
         errorExitWithMessage("Client: fopen() encrypted password failed.\n");
     }
 
+    /* Get number of bytes of each data piece */
+    int eSize;
+    if (fseek(eData, 0, SEEK_END))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
     
-    //TODO:Send the data from the files, each file preceded by its tag.
-  /*  char encDataBuf[ERRBUFSIZE];
-    int readCount;
-    while ((readCount = fread(encDataBuf, 1, 1024, f)))
+    if ((eSize = ftell(eData)) < 0)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("ftell() failed\n");
+    }
+
+    if (fseek(eData, 0, SEEK_SET))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
+
+    int sSize;
+    if (fseek(sData, 0, SEEK_END))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
+    
+    if ((sSize = ftell(sData)) < 0)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("ftell() failed\n");
+    }
+
+    if (fseek(sData, 0, SEEK_SET))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
+
+    int pSize;
+    if (fseek(pData, 0, SEEK_END))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
+    
+    if ((pSize = ftell(pData)) < 0)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("ftell() failed\n");
+    }
+
+    if (fseek(pData, 0, SEEK_SET))
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fseek() failed\n");
+    }
+
+    /* Write the tags */
+    char eTag[40], sTag[40], pTag[40];
+    snprintf(eTag, 40, "EncryptedFile[%d]", eSize);
+    snprintf(pTag, 40, "Password[%d]", pSize);
+    snprintf(sTag, 40, "Signature[%d]", sSize);
+
+    /* Send() the data to the server */
+    if (send(sockfd, eTag, strlen(eTag), 0) == -1)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Connected, but send() failed on eTag.\n");
+    }
+    while ((readCount = fread(encDataBuf, 1, 1024, eData)))
     {
         if (send(sockfd, encDataBuf, readCount, 0) == -1)
         {
             fclose(f);
             freeaddrinfo(servinfo);
-            errorExitWithMessage("Connected, but send() failed.\n");
+            errorExitWithMessage("Connected, but send() failed on eData.\n");
         }
-    } */
+    }
+
+    if (send(sockfd, sTag, strlen(sTag), 0) == -1)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Connected, but send() failed on sTag.\n");
+    }
+    while ((readCount = fread(encDataBuf, 1, 1024, sData)))
+    {
+        if (send(sockfd, encDataBuf, readCount, 0) == -1)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Connected, but send() failed on sData.\n");
+        }
+    }
+     
+    if (send(sockfd, pTag, strlen(pTag), 0) == -1)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Connected, but send() failed on pTag.\n");
+    }
+    while ((readCount = fread(encDataBuf, 1, 1024, pData)))
+    {
+        if (send(sockfd, encDataBuf, readCount, 0) == -1)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Connected, but send() failed on pData.\n");
+        }
+    }  
+    
 
     fclose(eData);
     fclose(sData);
