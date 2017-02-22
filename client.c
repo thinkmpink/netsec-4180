@@ -53,9 +53,6 @@ int main(int argc, char **argv)
      */
     char msgBuffer[ERRBUFSIZE];
     
-    //TODO: get rid of this once done with error checking
-
-    fprintf(stderr, "%d args\n", argc);
 
     /* Incorrect number of args */
     if (argc != 7)
@@ -262,7 +259,7 @@ int main(int argc, char **argv)
     if (passPID == 0) // Child process 3, execute
     {
         /* Encrypt the AES password using the server's public RSA key.
-         */ //TODO
+         */ 
         FILE *passFile = fopen("passfile", "wb");
         if (!passFile)
         {

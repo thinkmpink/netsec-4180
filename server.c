@@ -10,7 +10,6 @@
 #define ERRBUFSIZE 1024
 
 
-//TODO: move this to a header file
 void decryptAndVerify(FILE *encFileAll, char *result, const char *mode,
     const char *cPubKeyFilepath, const char *sPrivKeyFilepath);
 int errorExitWithMessage(const char *msg);
@@ -63,8 +62,6 @@ int main(int argc, char **argv)
      */
     char msgBuffer[ERRBUFSIZE];
     
-    //TODO: get rid of this once done with error checking
-    fprintf(stderr, "%d args\n", argc);
 
     /* Incorrect number of args */
     if (argc != 5)
@@ -86,7 +83,6 @@ int main(int argc, char **argv)
     char *fileNameToDecrypt     = "serv_encrypted_all.bin";
     unsigned short sPort;
 
-    //TODO: add section to check RSA info
     /* Minimal checking on RSA keys. Will pass this test if file
      * opens and the name has a valid format. */
     FILE *sPrivKeyF = fopen(sPrivKeyFilepath, "rb");
@@ -228,7 +224,6 @@ int main(int argc, char **argv)
             freeaddrinfo(res);
             errorExitWithMessage("(server) fwrite() failed\n");
         }
-        //TODO: maybe need other error checking on writeCount?
     }
 
     /* Recv error */
