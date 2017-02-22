@@ -1,4 +1,5 @@
-#
+# 
+# Michael Pinkham - Author
 # Makefile for Programming Project 1
 #
 
