@@ -11,7 +11,8 @@
 
 
 //TODO: move this to a header file
-void decryptAndVerify(FILE *encFile, char *result);
+void decryptAndVerify(FILE *encFileAll, char *result, const char *mode,
+    const char *cPubKeyFilepath, const char *sPrivKeyFilepath);
 int errorExitWithMessage(const char *msg);
 int isAlphaNum(const char *str);
 unsigned short getPort(const char *c);
@@ -63,16 +64,15 @@ int main(int argc, char **argv)
     char msgBuffer[ERRBUFSIZE];
     
     //TODO: get rid of this once done with error checking
-
     fprintf(stderr, "%d args\n", argc);
 
     /* Incorrect number of args */
-    if (argc != 4)
+    if (argc != 5)
     {
-        //TODO: fix <RSA components opts
         char *msgStart     = "Incorrect number of arguments.\nUsage: ";
         char *requiredArgs = " <Server Port> <Trust mode [t/u]>" 
-                             " <RSA components>\n";
+                             " <Client Public RSA Key Filepath>"
+                             " <Server Private RSA Key Filepath>\n";
         strlcpy(msgBuffer, msgStart, ERRBUFSIZE);
         strlcat(msgBuffer, argv[0], ERRBUFSIZE);
         strlcat(msgBuffer, requiredArgs, ERRBUFSIZE);
@@ -81,26 +81,43 @@ int main(int argc, char **argv)
 
     char *serverPort            = argv[1];
     char *trustMode             = argv[2];
-    char *rsaPrivKeyFilepath    = argv[3];
-    char *fileNameToDecrypt     = "encryptedfile";
+    char *cPubKeyFilepath       = argv[3];
+    char *sPrivKeyFilepath      = argv[4];
+    char *fileNameToDecrypt     = "serv_encrypted_all.bin";
     unsigned short sPort;
 
     //TODO: add section to check RSA info
+    /* Minimal checking on RSA keys. Will pass this test if file
+     * opens and the name has a valid format. */
+    FILE *sPrivKeyF = fopen(sPrivKeyFilepath, "rb");
+    if (!sPrivKeyF || sPrivKeyFilepath[strlen(sPrivKeyFilepath)-1] == '/')
+    {
+        if (sPrivKeyF) fclose(sPrivKeyF);
+        strlcpy(msgBuffer, "File '", ERRBUFSIZE);
+        strlcat(msgBuffer, sPrivKeyFilepath, ERRBUFSIZE);
+        strlcat(msgBuffer, "' does not exist.\n", ERRBUFSIZE);
+        errorExitWithMessage(msgBuffer);
+    }
+    fclose(sPrivKeyF);
+
+    FILE *cPubKeyF = fopen(cPubKeyFilepath, "rb");
+    if (!cPubKeyF || cPubKeyFilepath[strlen(cPubKeyFilepath)-1] == '/')
+    {
+        if (cPubKeyF) fclose(cPubKeyF);
+        strlcpy(msgBuffer, "File '", ERRBUFSIZE);
+        strlcat(msgBuffer, cPubKeyFilepath, ERRBUFSIZE);
+        strlcat(msgBuffer, "' does not exist.\n", ERRBUFSIZE);
+        errorExitWithMessage(msgBuffer);
+    }
+    fclose(cPubKeyF);
+    
+
     
     /* Parse trust mode */
-    if (!(strncmp(trustMode, "t", 2)))
-    {
-        ; //Do nothing
-    }
-    else if (!(strncmp(trustMode, "u", 2)))
-    {
-        fileNameToDecrypt = "fakefile";
-    }
-    else
+    if ((strncmp(trustMode, "t", 2)) && (strncmp(trustMode, "u", 2)))
     {
         errorExitWithMessage("Unrecognized trust mode. Rerun with [t/u]\n");
     }
-
 
     /* Incorrect server port number */
     if (!(sPort = getPort(serverPort)))
@@ -188,8 +205,7 @@ int main(int argc, char **argv)
     FILE *encDataFile;
 
     /* Open intermediate file to write received bytes to. */
-    //TODO: possible data race with fileToDecrypt pointer
-    if (!(encDataFile = fopen("encryptedfile", "w+")))
+    if (!(encDataFile = fopen("serv_encrypted_all.bin", "w+")))
     {
         close(welcomeSock);
         close(clientSock);
@@ -200,7 +216,6 @@ int main(int argc, char **argv)
     /* Server receives encrypted bytes from client
      * Server writes the bytes to 'encryptedfile', a temp file 
      */
-     //TODO: delete the temp file?
     while ((readCount = recv(clientSock, encDataBuf, ERRBUFSIZE, 0)) > 0)
     {
         /* Write bytes to disk, or exit while loop if read 0 bytes */
@@ -238,15 +253,18 @@ int main(int argc, char **argv)
     freeaddrinfo(res);
 
     FILE *fileToDecrypt;
+
     if (!(fileToDecrypt = fopen(fileNameToDecrypt, "rb")))
     {
-        errorExitWithMessage("fopen() failed to open encryptedfile/fakefile\n");
+        errorExitWithMessage("fopen() failed to open"
+            "serv_encrypted_all.bin\n");
     }
 
     /* Server will write result of verification here */
     char verificationResult[20];
     memset(verificationResult, 0, 20);
-    decryptAndVerify(fileToDecrypt, (char *) verificationResult);
+    decryptAndVerify(fileToDecrypt, (char *) verificationResult,
+              trustMode, cPubKeyFilepath, sPrivKeyFilepath);
     
     fprintf(stdout, "%s\n", verificationResult);
 
@@ -256,10 +274,12 @@ int main(int argc, char **argv)
 
 
 
-//TODO: decrypt file using libcrypto 
-//TODO: verify signature, output Verification result
-
-void decryptAndVerify(FILE *encFile, char *result)
+/* encFileAll: the open fakefile or serv_encrypted_all.bin
+ * result: the buffer in the calling function to which to write
+ *         either 'Verification Failed' or 'Verification Passed' 
+ */
+void decryptAndVerify(FILE *encFileAll, char *result, const char *mode,
+    const char *cPubKeyFilepath, const char *sPrivKeyFilepath)
 {
     /*
      * Tags will specify the arrangement of data in fileToDecrypt.
@@ -286,56 +306,43 @@ void decryptAndVerify(FILE *encFile, char *result)
     char *fBuf;
 
     /* Position stream at end of file to get num bytes*/
-    if(fseek(encFile, 0, SEEK_END))
+    if(fseek(encFileAll, 0, SEEK_END))
     {
-        fclose(encFile);
+        fclose(encFileAll);
         errorExitWithMessage("fseek( ..., SEEK_END) failed\n");
     }
 
     /* Save length of file */
-    if((fSize = ftell(encFile)) < 0)
+    if((fSize = ftell(encFileAll)) < 0)
     {
-        fclose(encFile);
+        fclose(encFileAll);
         errorExitWithMessage("ftell() failed\n");
     }
 
     /* Move cursor back to beginning of file */
-    if(fseek(encFile, 0, SEEK_SET))
+    if(fseek(encFileAll, 0, SEEK_SET))
     {
-        fclose(encFile);
+        fclose(encFileAll);
         errorExitWithMessage("fseek( ..., SEEK_SET) failed\n");
     }
 
     /* Allocate enough memory for file */
     if(!(fBuf = malloc(fSize)))
     {
-        fclose(encFile);
+        fclose(encFileAll);
         errorExitWithMessage("malloc() failed to allocate size of file\n");
     }
     
     /* Read the file into memory */
-    if (fSize != (fread(fBuf, 1, fSize, encFile)))
+    if (fSize != (fread(fBuf, 1, fSize, encFileAll)))
     {
-        fclose(encFile);
+        fclose(encFileAll);
         free(fBuf);
-        errorExitWithMessage("fgetc() failed. file length too short\n");
+        errorExitWithMessage("fread() failed. file length too short\n");
     }
 
-    int i;
-  /*  for (i = 0; i < fSize; i++)
-    {
-        if ((fBuf[i] = fgetc(encFile)) == EOF)
-        {
-            fprintf(stderr, "wrote fbuf[i] where i: %d"
-                ", fBuf[i]:%d, fSize: %d",
-                i, (int) fBuf[i], (int)fSize);
-            fclose(encFile);
-            free(fBuf);
-            errorExitWithMessage("fgetc() failed. file length too short\n");
-        }
-    } 
-  */
     /* Find all tags */
+    int i;
     char c;
     for (i = 0; i < fSize; i++)
     {
@@ -394,6 +401,7 @@ void decryptAndVerify(FILE *encFile, char *result)
     {
         free(fBuf);
         strncpy(result, "Verification Failed", 20);
+        fprintf(stderr, "Verification failed in 15 dig num bytes.\n");
         return;
     }
 
@@ -446,6 +454,7 @@ void decryptAndVerify(FILE *encFile, char *result)
     {
         free(fBuf);
         strncpy(result, "Verification Failed", 20);
+        fprintf(stderr, "Verification failed in invalid byte len.\n");
         return;
     }
 
@@ -457,6 +466,7 @@ void decryptAndVerify(FILE *encFile, char *result)
      )
     {
         free(fBuf);
+        fprintf(stderr, "Verification failed in convert str byte.\n");
         strncpy(result, "Verification Failed", 20);
         return;
     }
@@ -471,11 +481,212 @@ void decryptAndVerify(FILE *encFile, char *result)
     )
     {
         free(fBuf);
+        fprintf(stderr, "Verification failed in Verif spec num byte.\n");
         strncpy(result, "Verification Failed", 20);
         return;
     }
 
+    /* Write the three encrypted pieces to separate files */
+    FILE *passF = fopen("serv_enc_password.bin", "wb");
+    if (!passF)
+    {
+        free(fBuf);
+        errorExitWithMessage("fopen() serv_enc_password.bin failed \n");
+    }
+    if (pLen != fwrite(pData, 1, pLen, passF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fwrite() serv_enc_password.bin failed \n");
+    }
+    if (fclose(passF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fclose() failed \n");
+    }
+
+    FILE *encF = fopen("serv_enc_data.bin", "wb");
+    if (!encF)
+    {
+        free(fBuf);
+        errorExitWithMessage("fopen() serv_enc_data.bin failed \n");
+    }
+    if (eLen != fwrite(eData, 1, eLen, encF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fwrite() serv_enc_data.bin failed \n");
+    }
+    if (fclose(encF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fclose() failed \n");
+    }
+
+    FILE *sigF = fopen("serv_enc_cli_sig.bin", "wb");
+    if (!sigF)
+    {
+        free(fBuf);
+        errorExitWithMessage("fopen() serv_enc_cli_sig.bin failed \n");
+    }
+    if (sLen != fwrite(sData, 1, sLen, sigF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fwrite() serv_enc_cli_sig.bin failed \n");
+    }
+    if (fclose(sigF))
+    {
+        free(fBuf);
+        errorExitWithMessage("fclose() failed \n");
+    }
+
+
+    /* Decrypt the password using server privkey, save to file, then to
+     * char buf in parent (will need to sleep() again) */
+    pid_t passPID, encPID, sigPID;
+
+    passPID = fork();
+    if (passPID < 0)
+    {
+        free(fBuf);
+        errorExitWithMessage("fork() 1 (server) failed \n");
+    }
+    if (passPID == 0) // Child process, execute (Decrypt client password)
+    {
+        if (execlp("openssl", "rsautl", "-decrypt", "-inkey",
+                   sPrivKeyFilepath, "-in", 
+                   "serv_enc_password.bin", "-out", 
+                   "serv_dec_password.bin", (char *) NULL) < 0)
+        {
+            free(fBuf);
+            strncpy(result, "Verification Failed", 20);
+            fprintf(stderr, "Failed in child 1.\n");
+            return;
+        }
+    }
+
+    sleep(1); /* We need the child to write the password file before
+               * proceeding. Now get password and delete PT password */
+    FILE *dPass = fopen("serv_dec_password.bin", "rb");
+    if (!dPass)
+    {
+        free(fBuf);
+        errorExitWithMessage("fopen() (serv_dec_password.bin failed \n");
+    }
+    char pass[17];
+    if (16 != fread((char *)pass, 1, 16, dPass))
+    {
+        free(fBuf);
+        fclose(dPass);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+    pass[16] = 0;
+
+    if (fclose(dPass))
+    {
+        free(fBuf);
+        errorExitWithMessage("fclose() PT passfile failed\n");
+    }
+
+
+
+
+    /* Choose what to decrypt based on trust mode */
+    char *eDataFilename = "serv_enc_data.bin";
+    if (mode[0] == 'u')
+    {
+        eDataFilename = "fakefile";
+    }
+
+
     
+    encPID = fork(); /* Fork again */
+    if (encPID < 0)
+    {
+        free(fBuf);
+        errorExitWithMessage("fork() 2 (server) failed \n");
+    }
+
+    if (encPID == 0) // Child 2. Execute. (Decrypt client CT)
+    {
+        if (execlp("openssl", "enc", "-d", "-aes-128-cbc", "-in",
+                   eDataFilename, "-out", "decryptedfile", 
+                   "-pass", 
+                   "file:serv_dec_password.bin", (char *) NULL) < 0)
+        {
+            free(fBuf);
+            fprintf(stderr, "Failed in child 2.\n");
+            strncpy(result, "Verification Failed", 20);
+            return;
+        }
+    }
+    
+    /* (Back in parent) Remove the PT password asap */
+    sleep(1);
+    if (remove("serv_dec_password.bin"))
+    {
+        free(fBuf);
+        errorExitWithMessage("remove() PT passfile failed\n");
+    }
+    
+    /* Fork a final time to complete verification */
+    sigPID = fork(); 
+    if (sigPID < 0)
+    {
+        free(fBuf);
+        errorExitWithMessage("fork() 3 (server) failed \n");
+    }
+
+    if (sigPID == 0) /* Child 3. Execute. (verify client signature) */
+    {
+        if (execlp("openssl", "dgst", "-sha256", "-out", 
+                   "verification_result", "-verify",
+                   cPubKeyFilepath, "-signature",
+                   "serv_enc_cli_sig.bin", "decryptedfile",
+                   (char *) NULL) < 0)
+        {
+            free(fBuf);
+            fprintf(stderr, "Failed in child 3.\n");
+            strncpy(result, "Verification Failed", 20);
+            return;
+        }
+    }
+
+    sleep(1);
+    /* Open verification result and see what's inside */
+    FILE *resultF = fopen("verification_result", "rb");
+    if (!resultF)
+    {
+        free(fBuf);
+        fprintf(stderr, "fopen() failed on verification_result\n");
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+    char vResult[30];
+    memset((char *) vResult, 0, 30);
+    if (10 > fread((char *) vResult, 1, 25, resultF))
+    {  /* Output should have been "Verified OK" or "Verification Failure" */
+        free(fBuf);
+        fprintf(stderr, "fread() failed on verification_result\n");
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+    if (fclose(resultF))
+    {
+        free(fBuf);
+        fprintf(stderr, "fclose() failed on verification_result\n");
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
+
+    if (!strncmp(vResult, "Verification Failure", 20))
+    {
+        free(fBuf);
+        fprintf(stderr, "verification_result was negative\n");
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
     free(fBuf);
     strncpy(result, "Verification Passed", 20);
     return;

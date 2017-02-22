@@ -8,15 +8,18 @@ memchk="eval "$outspace";"$valgrind
 $memchk 
 
 # Invalid trust mode
-$memchk 12344 ur 44
-$memchk 12344 tr 44
+$memchk 12344 ur key_cli.pub.pem key_serv.pem
+$memchk 12344 tr key_cli.pub.pem key_serv.pem
+
+# Invalid file names 
+$memchk 12344 ur key_cli.pub.pe key_serv.pem
+$memchk 12344 tr key_cli.pub.pem key_serv.pe
 
 # Invalid port number 
-$memchk 77777 t 5
+$memchk 77777 t key_cli.pub.pem key_serv.pem
 
-# Invalid trust mode (TO BE IMPLEMENTED)
+# Valid input 1
+$memchk 12344 t key_cli.pub.pem key_serv.pem
 
-# Valid input
-$memchk 12344 t 234
-
-
+# Valid input 2
+$memchk 12344 u key_cli.pub.pem key_serv.pem

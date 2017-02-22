@@ -28,3 +28,9 @@ $memchk 8345yghbfu4renjh ./client.c localhost 72344 key_cli.pem key_serv.pub.pem
 
 # Valid everything (server dies)
 $memchk 2083rgf724ryfh3i ./client.c localhost 12344 key_cli.pem key_serv.pub.pem
+
+# Let server start itself up again
+sleep 4
+
+# Valid everything (server dies)
+$memchk 2083rgf724ryfh3i ./client localhost 12344 key_cli.pem key_serv.pub.pem

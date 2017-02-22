@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     char *serverPort            = argv[4];
     char *cPrivKeyFilepath      = argv[5];
     char *sPubKeyFilepath       = argv[6];
-    FILE *f;
+    FILE *f, *cPrivKeyF, *sPubKeyF;
     unsigned short sPort;
 
 
@@ -99,10 +99,32 @@ int main(int argc, char **argv)
         errorExitWithMessage(msgBuffer);
     }
 
-    //TODO: add section to check RSA info
+    /* Minimal checking on RSA keys. Will pass this test if file
+     * opens and the name has a valid format. */
+    cPrivKeyF = fopen(cPrivKeyFilepath, "rb");
+    if (!cPrivKeyF || cPrivKeyFilepath[strlen(cPrivKeyFilepath)-1] == '/')
+    {
+        if (cPrivKeyF) fclose(cPrivKeyF);
+        strlcpy(msgBuffer, "File '", ERRBUFSIZE);
+        strlcat(msgBuffer, cPrivKeyFilepath, ERRBUFSIZE);
+        strlcat(msgBuffer, "' does not exist.\n", ERRBUFSIZE);
+        errorExitWithMessage(msgBuffer);
+    }
+    fclose(cPrivKeyF);
+
+    sPubKeyF = fopen(sPubKeyFilepath, "rb");
+    if (!sPubKeyF || sPubKeyFilepath[strlen(sPubKeyFilepath)-1] == '/')
+    {
+        if (sPubKeyF) fclose(sPubKeyF);
+        strlcpy(msgBuffer, "File '", ERRBUFSIZE);
+        strlcat(msgBuffer, sPubKeyFilepath, ERRBUFSIZE);
+        strlcat(msgBuffer, "' does not exist.\n", ERRBUFSIZE);
+        errorExitWithMessage(msgBuffer);
+    }
+    fclose(sPubKeyF);
 
     /* Incorrect server port number */
-    else if (!(sPort = getPort(serverPort)))
+    if (!(sPort = getPort(serverPort)))
     {    
         fclose(f);
         errorExitWithMessage("Please enter a port number 0 < n < 65536. \n");
