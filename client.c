@@ -186,7 +186,6 @@ int main(int argc, char **argv)
     pid_t fileEncPID, sigPID, passPID;
     fileEncPID = fork();
     
-    //v2
     if (fileEncPID < 0)
     {
         fclose(f);
@@ -230,66 +229,94 @@ int main(int argc, char **argv)
         // Should not get here
     }
 
-    /*
-    if (fileEncPID >= 0) // Fork was successful
+    passPID = fork();
+    if (passPID < 0)
     {
-        if (fileEncPID == 0) // Child process, execute
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fork() 3 failed.\n");
+    }
+
+    if (passPID == 0) // Child process 3, execute
+    {
+        /* Encrypt the AES password using the server's public RSA key.
+         */ //TODO
+        FILE *passFile = fopen("passfile", "wb");
+        if (!passFile)
         {
-            // Encrypt the file using AES_128_CBC and the 16 byte key 
-            if(execlp("openssl", "enc", "-e", "-aes-128-cbc", "-in", filepath, 
-                  "-out", "./encfile.enc",  "-k", password, (char *) NULL) < 0)
-            {
-                fclose(f);
-                freeaddrinfo(servinfo);
-                errorExitWithMessage("Encryption of PT failed.\n");
-            }
-
-            // Should not ever get here
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Password temp write failed (this is a hack).\n");
         }
-
-        else // Parent process
+        fwrite(password, 1, 16, passFile);
+        fclose(passFile);
+        if(execlp("openssl", "rsautl", "-encrypt", "-inkey", sPubKeyFilepath,
+                  "-pubin", "-in", "passfile", "-out", 
+                  "./password.enc", (char *) NULL) < 0)
         {
-            // Fork again to execute 
-            sigPID = fork();
-            if (sigPID >= 0) // Second fork successful
+            fclose(f);
+            freeaddrinfo(servinfo);
+            if (remove("passfile")) 
             {
-                if (sigPID == 0) // Child process 2, execute
-                {
-                    // Hash the file with SHA256 and sign it by encrypting the 
-                    // hash using the client's private RSA key. 
-                    if(execlp("openssl", "dgst", "-sha256", "-sign", 
-                              cPrivKeyFilepath, "-out", "./clientsig.sign", 
-                              filepath, (char *) NULL) < 0)
-                    {
-                        fclose(f);
-                        freeaddrinfo(servinfo);
-                        errorExitWithMessage("Signing PT failed.\n");
-                    }
-                    // Should not get here
-                }
-                
-                else // Parent process 2
-                {
-                    //TODO fork again and encrypt password
-                    //TODO for now just clean up
-                    fclose(f);
-                    freeaddrinfo(servinfo);
-                    exit(0);
-                }
-
+                errorExitWithMessage("remove() failed.\n");
             }
+            errorExitWithMessage("Encrypting password failed.\n");
         }
-        
+        // Should not get here
+    }
+
+    /* We're in the parent process. Wait a little, then open the files and 
+     * send the data to the server */
+    sleep(1);
+
+    /* First clean up the hack */
+    if (remove("passfile")) 
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("remove() failed.\n");
+    }
+    
+    /* Open the encrypted data files */
+    FILE *eData = fopen("encfile.enc", "rb");
+    if (!eData) 
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Client: fopen() CT failed.\n");
+    }
+    FILE *sData = fopen("clientsig.sign", "rb");
+    if (!sData) 
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Client: fopen() signature failed.\n");
+    }
+    FILE *pData = fopen("password.enc", "rb");
+    if (!pData) 
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("Client: fopen() encrypted password failed.\n");
+    }
+
+    
+    //TODO:Send the data from the files, each file preceded by its tag.
+  /*  char encDataBuf[ERRBUFSIZE];
+    int readCount;
+    while ((readCount = fread(encDataBuf, 1, 1024, f)))
+    {
+        if (send(sockfd, encDataBuf, readCount, 0) == -1)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Connected, but send() failed.\n");
+        }
     } */
 
-
-
-
-
-    /* Encrypt the AES password using the server's public RSA key.
-     */
-    //TODO
-
+    fclose(eData);
+    fclose(sData);
+    fclose(pData);
 
     fclose(f);
     freeaddrinfo(servinfo);
