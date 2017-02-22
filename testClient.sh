@@ -12,19 +12,19 @@ memchk="eval "$outspace";"$valgrind
 $memchk
 
 # Try invalid password (wrong length)
-$memchk 23efjknj ./client.c localhost 12344 234
+$memchk 23efjknj ./client.c localhost 12344 session_key_cli session_key_serv.pub
 
 # Try invalid password (wrong type)
-$memchk 234r23-*34de344f ./client.c localhost 12344 234
+$memchk 234r23-*34de344f ./client.c localhost 12344 session_key_cli session_key_serv.pub
 
 # Try invalid PT file name
-$memchk 239r0f8hu2ijk3ej ./client.cpp localhost 12344 234
+$memchk 239r0f8hu2ijk3ej ./client.cpp localhost 12344 session_key_cli session_key_serv.pub
 
 # Try invalid server IP address 
-$memchk 123d90j84u58fnnw ./client.c 1234.55.6.88 12344 234 
+$memchk 123d90j84u58fnnw ./client.c 1234.55.6.88 12344 session_key_cli session_key_serv.pub
 
 # Try invalid server port number
-$memchk 8345yghbfu4renjh ./client.c localhost 72344 234
+$memchk 8345yghbfu4renjh ./client.c localhost 72344 session_key_cli session_key_serv.pub
 
 # Valid everything (server dies)
-$memchk 2083rgf724ryfh3i ./client.c localhost 12344 234
+$memchk 2083rgf724ryfh3i ./client.c localhost 12344 session_key_cli session_key_serv.pub

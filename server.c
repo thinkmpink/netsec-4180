@@ -9,6 +9,15 @@
 
 #define ERRBUFSIZE 1024
 
+
+//TODO: move this to a header file
+void decryptAndVerify(FILE *encFile, char *result);
+int errorExitWithMessage(const char *msg);
+int isAlphaNum(const char *str);
+unsigned short getPort(const char *c);
+
+
+
 /* Terminates execution of the program and prints the error message argument */
 int errorExitWithMessage(const char *msg)
 {
@@ -73,7 +82,7 @@ int main(int argc, char **argv)
     char *serverPort            = argv[1];
     char *trustMode             = argv[2];
     char *rsaPrivKeyFilepath    = argv[3];
-    char *fileToDecrypt         = "encryptedfile";
+    char *fileNameToDecrypt     = "encryptedfile";
     unsigned short sPort;
 
     //TODO: add section to check RSA info
@@ -85,7 +94,7 @@ int main(int argc, char **argv)
     }
     else if (!(strncmp(trustMode, "u", 2)))
     {
-        fileToDecrypt = "fakefile";
+        fileNameToDecrypt = "fakefile";
     }
     else
     {
@@ -179,6 +188,7 @@ int main(int argc, char **argv)
     FILE *encDataFile;
 
     /* Open intermediate file to write received bytes to. */
+    //TODO: possible data race with fileToDecrypt pointer
     if (!(encDataFile = fopen("encryptedfile", "w+")))
     {
         close(welcomeSock);
@@ -216,15 +226,248 @@ int main(int argc, char **argv)
         errorExitWithMessage("recv() failed\n");
     }
 
-
-    //TODO: decrypt file using execl with opts from cookbook
-    //TODO: verify signature, output Verification result
-
-
+    /* 
+     * Close the file of bytes the client sent, and open the file 
+     * determined by the trust mode (which is the same or 'fakefile'). 
+     * Halt and clean up if we cannot open this file. In all cases, 
+     * close the connection to the client and the server socket.
+     */
+    fclose(encDataFile);
     close(welcomeSock);
     close(clientSock);
-    fclose(encDataFile);
     freeaddrinfo(res);
+
+    FILE *fileToDecrypt;
+    if (!(fileToDecrypt = fopen(fileNameToDecrypt, "rb")))
+    {
+        errorExitWithMessage("fopen() failed to open encryptedfile/fakefile\n");
+    }
+
+    /* Server will write result of verification here */
+    char verificationResult[20];
+    memset(verificationResult, 0, 20);
+    decryptAndVerify(fileToDecrypt, (char *) verificationResult);
+    
+    fprintf(stdout, "%s\n", verificationResult);
+
+    fclose(fileToDecrypt); //TODO: delete it?
     exit(0);
 }
+
+
+
+//TODO: decrypt file using libcrypto 
+//TODO: verify signature, output Verification result
+
+void decryptAndVerify(FILE *encFile, char *result)
+{
+    /*
+     * Tags will specify the arrangement of data in fileToDecrypt.
+     * A tag can be one of the following, where N is the number of bytes:
+     *
+     *   EncryptedFile[N] 
+     *   Password[N]
+     *   Signature[N]
+     *
+     * The sender must send all of these tags with no space before the
+     * encrypted data, for the data to be properly decrypted. The tags
+     * must not be encrypted, and must be fully in ASCII byte format. In 
+     * particular, N must be a decimal-formatted string (terminated by 
+     * the closing bracket). The order of the three is up to the client.
+     */
+
+    /* [Verification Step 1] Verify and find tags */
+    char *encData, *encPassword, *signature; //Pointers to the tags
+    char *eData, *pData, *sData; //Pointers to the data after the tags
+    encData = NULL; eData = encData;
+    encPassword = NULL; pData = encPassword;
+    signature = NULL; sData = signature;
+    long fSize;
+    char *fBuf;
+
+    /* Position stream at end of file to get num bytes*/
+    if(fseek(encFile, 0, SEEK_END))
+    {
+        fclose(encFile);
+        errorExitWithMessage("fseek( ..., SEEK_END) failed\n");
+    }
+
+    /* Save length of file */
+    if((fSize = ftell(encFile)) < 0)
+    {
+        fclose(encFile);
+        errorExitWithMessage("ftell() failed\n");
+    }
+
+    /* Move cursor back to beginning of file */
+    if(fseek(encFile, 0, SEEK_SET))
+    {
+        fclose(encFile);
+        errorExitWithMessage("fseek( ..., SEEK_SET) failed\n");
+    }
+
+    /* Allocate enough memory for file */
+    if(!(fBuf = malloc(fSize)))
+    {
+        fclose(encFile);
+        errorExitWithMessage("malloc() failed to allocate size of file\n");
+    }
+    
+    /* Read the file into memory */
+    int i;
+    for (i = 0; i < fSize; i++)
+    {
+        if ((fBuf[i] = fgetc(encFile)) < 0)
+        {
+            fclose(encFile);
+            free(fBuf);
+            errorExitWithMessage("fgetc() failed. file length too short\n");
+        }
+    } 
+
+    /* Find all tags */
+    char c;
+    for (i = 0; i < fSize; i++)
+    {
+        c = fBuf[i];
+
+        if (c == 'E')
+        {
+            /* Test for EncryptedFile tag */
+            if(!(strncmp(fBuf + i, "EncryptedFile[", 14)))
+            {
+                encData = fBuf + i;        
+            }
+        }
+
+        else if (c == 'P')
+        {
+            /* Test for Password tag */
+            if(!(strncmp(fBuf + i, "Password[", 9)))
+            {
+                encPassword = fBuf + i;        
+            }
+        }
+
+        else if (c == 'S')
+        {
+            /* Test for Signature tag */
+            if(!(strncmp(fBuf + i, "Signature[", 10)))
+            {
+                signature = fBuf + i;        
+            }
+        }
+    }
+
+    /* Output 'Verification Failed' if we are missing a piece */
+    if (!encData || !encPassword || !signature) 
+    {
+        free(fBuf);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+    
+    /* Validate byte lengths */
+    encData += 14;
+    encPassword += 9;
+    signature += 10;
+    
+    /* Allow up to 15 digits for number of bytes */
+    char encDataLenStr[16], encPasswordLenStr[16], signatureLenStr[16];
+    memset(encDataLenStr, 0, 16);
+    memset(encPasswordLenStr, 0, 16);
+    memset(signatureLenStr, 0, 16);
+    char cE, cP, cS;
+    if (!(encData + 15 < fBuf + fSize 
+     && encPassword + 15 < fBuf + fSize
+     && signature + 15 < fBuf + fSize))
+    {
+        free(fBuf);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
+    /* Copy length strings to buffers, null-terminate them */
+    unsigned char lenStrComplete = 0;
+    for (i = 0; i < 15; i++)
+    {
+        cE = encData[i]; 
+        cP = encPassword[i];
+        cS = signature[i];
+        if (cE == ']')
+        {
+            encDataLenStr[i] = 0;
+            eData = encData + i + 1;
+            lenStrComplete += 1;
+        }
+        
+        else 
+        {
+            encDataLenStr[i] = cE;
+        }
+
+        if (cP == ']')
+        {
+            encPasswordLenStr[i] = 0;
+            pData = encPassword + i + 1;
+            lenStrComplete += 1;
+        }
+
+        else 
+        {
+            encPasswordLenStr[i] = cP;
+        }
+
+        if (cS == ']')
+        {
+            signatureLenStr[i] = 0;
+            sData = signature + i + 1;
+            lenStrComplete += 1;
+        }
+
+        else 
+        {
+            signatureLenStr[i] = cS;
+        }
+    }
+
+    /* Invalid byte length */
+    if (lenStrComplete != 3)
+    {
+        free(fBuf);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
+    /* Convert string byte lengths to longs */
+    long encDataLen, encPasswordLen, signatureLen;
+    if ((encDataLen = strtol(encDataLenStr, NULL, 10)) < 1
+     || (encPasswordLen = strtol(encPasswordLenStr, NULL, 10)) < 1
+     || (signatureLen = strtol(signatureLenStr, NULL, 10)) < 1
+     )
+    {
+        free(fBuf);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
+    /* Verify that there are the specified number of bytes in each section */  
+    int eLen = (int) encDataLen;
+    int pLen = (int) encPasswordLen;
+    int sLen = (int) signatureLen;
+    if (eData + eLen > fBuf + fSize
+     || sData + sLen > fBuf + fSize
+     || pData + pLen > fBuf + fSize
+    )
+    {
+        free(fBuf);
+        strncpy(result, "Verification Failed", 20);
+        return;
+    }
+
+    
+    strncpy(result, "Verification Passed", 20);
+    return;
+}
+
 

@@ -58,12 +58,12 @@ int main(int argc, char **argv)
     fprintf(stderr, "%d args\n", argc);
 
     /* Incorrect number of args */
-    if (argc != 6)
+    if (argc != 7)
     {
-        //TODO: fix <RSA components opts
         char *msgStart     = "Incorrect number of arguments.\nUsage: ";
         char *requiredArgs = " <Password> <Full file path> <Server IP or Name>" 
-                             " <Server Port> <RSA components>\n";
+                             " <Server Port> <Client private key file name>"
+                             " <Server public key file name>\n";
         strlcpy(msgBuffer, msgStart, ERRBUFSIZE);
         strlcat(msgBuffer, argv[0], ERRBUFSIZE);
         strlcat(msgBuffer, requiredArgs, ERRBUFSIZE);
@@ -75,7 +75,8 @@ int main(int argc, char **argv)
     char *filepath              = argv[2];
     char *serverIP              = argv[3];
     char *serverPort            = argv[4];
-    char *rsaPrivKeyFilepath    = argv[5];
+    char *cPrivKeyFilepath      = argv[5];
+    char *sPubKeyFilepath       = argv[6];
     FILE *f;
     unsigned short sPort;
 
@@ -179,9 +180,115 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Since we are using exec() to do the crypto, which won't return, 
+     * we need to create a fork to call exec */
 
-    //TODO: get server's public key somehow
-    //TODO: encrypt open file using execl with opts from cookbook
+    pid_t fileEncPID, sigPID, passPID;
+    fileEncPID = fork();
+    
+    //v2
+    if (fileEncPID < 0)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fork() 1 failed.\n");
+    }
+
+    if (fileEncPID == 0) // Child process, execute
+    {
+        // Encrypt the file using AES_128_CBC and the 16 byte key 
+        if(execlp("openssl", "enc", "-e", "-aes-128-cbc", "-in", filepath, 
+              "-out", "./encfile.enc",  "-k", password, (char *) NULL) < 0)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Encryption of PT failed.\n");
+        }
+        // Should not ever get here
+    }   
+
+    sigPID = fork();
+    if (sigPID < 0)
+    {
+        fclose(f);
+        freeaddrinfo(servinfo);
+        errorExitWithMessage("fork() 2 failed.\n");
+    }
+
+    if (sigPID == 0) // Child process 2, execute
+    {
+        // Hash the file with SHA256 and sign it by encrypting the 
+        // hash using the client's private RSA key. 
+        if(execlp("openssl", "dgst", "-sha256", "-sign", 
+                  cPrivKeyFilepath, "-out", "./clientsig.sign", 
+                  filepath, (char *) NULL) < 0)
+        {
+            fclose(f);
+            freeaddrinfo(servinfo);
+            errorExitWithMessage("Signing PT failed.\n");
+        }
+        // Should not get here
+    }
+
+    /*
+    if (fileEncPID >= 0) // Fork was successful
+    {
+        if (fileEncPID == 0) // Child process, execute
+        {
+            // Encrypt the file using AES_128_CBC and the 16 byte key 
+            if(execlp("openssl", "enc", "-e", "-aes-128-cbc", "-in", filepath, 
+                  "-out", "./encfile.enc",  "-k", password, (char *) NULL) < 0)
+            {
+                fclose(f);
+                freeaddrinfo(servinfo);
+                errorExitWithMessage("Encryption of PT failed.\n");
+            }
+
+            // Should not ever get here
+        }
+
+        else // Parent process
+        {
+            // Fork again to execute 
+            sigPID = fork();
+            if (sigPID >= 0) // Second fork successful
+            {
+                if (sigPID == 0) // Child process 2, execute
+                {
+                    // Hash the file with SHA256 and sign it by encrypting the 
+                    // hash using the client's private RSA key. 
+                    if(execlp("openssl", "dgst", "-sha256", "-sign", 
+                              cPrivKeyFilepath, "-out", "./clientsig.sign", 
+                              filepath, (char *) NULL) < 0)
+                    {
+                        fclose(f);
+                        freeaddrinfo(servinfo);
+                        errorExitWithMessage("Signing PT failed.\n");
+                    }
+                    // Should not get here
+                }
+                
+                else // Parent process 2
+                {
+                    //TODO fork again and encrypt password
+                    //TODO for now just clean up
+                    fclose(f);
+                    freeaddrinfo(servinfo);
+                    exit(0);
+                }
+
+            }
+        }
+        
+    } */
+
+
+
+
+
+    /* Encrypt the AES password using the server's public RSA key.
+     */
+    //TODO
 
 
     fclose(f);
