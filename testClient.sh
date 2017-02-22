@@ -1,3 +1,4 @@
+# Michael Pinkham - Author
 #!/bin/bash
 
 # Run this once when server is not running, and again when it is

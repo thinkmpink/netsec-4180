@@ -1,3 +1,4 @@
+# Michael Pinkham - Author
 #!/bin/bash
 
 valgrind="valgrind --leak-check=full --show-leak-kinds=all ./server "

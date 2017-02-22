@@ -1,3 +1,4 @@
+/* Michael Pinkham - Author */
 
 #include <arpa/inet.h>
 #include <bsd/string.h>

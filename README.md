@@ -5,6 +5,7 @@ Programming Assignment 1
 1 What to install (using `sudo apt-get install`)
  - gcc
  - make
+ - libbsd-dev
  - valgrind
  - openssl
  - git (don't need this but it's what I installed)
