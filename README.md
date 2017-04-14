@@ -1,5 +1,5 @@
 Michael Pinkham - Author (mlp2185@columbia.edu)
-COMS4180 Network Security
+COMS4180 Network Security 
 Programming Assignment 1
 
 1 What to install (using `sudo apt-get install`)
